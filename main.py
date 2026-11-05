@@ -29,7 +29,6 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 from faker import Faker
 
-# Определение путей (работает и для exe, и для исходников)
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(sys._MEIPASS)
     DATA_DIR = Path(sys.executable).parent / "data"
@@ -46,7 +45,6 @@ MASKED_DIR = DATA_DIR / "masked"
 UPLOAD_DIR.mkdir(exist_ok=True)
 MASKED_DIR.mkdir(exist_ok=True)
 
-# Настройка логирования (для админа — в файл)
 LOG_FILE = DATA_DIR / "activity.log"
 logging.basicConfig(
     filename=str(LOG_FILE),
@@ -57,7 +55,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("activity")
 
-fake = Faker('ru_RU')  # Русские ФИО, телефоны, паспорта
+fake = Faker('ru_RU')
 
 # ============================================================
 # МОДУЛЬ: УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (JSON, ДИНАМИЧЕСКОЕ ЧТЕНИЕ)
@@ -126,7 +124,7 @@ class FileProgress(Base):
 
 engine = create_engine(
     f"sqlite:///{DB_FILE}",
-    connect_args={"check_same_thread": False}  # Для FastAPI в нескольких потоках
+    connect_args={"check_same_thread": False}
 )
 Base.metadata.create_all(engine)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
@@ -153,32 +151,26 @@ def detect_column_type(values: List[Any]) -> str:
     if not sample:
         return "text"
     
-    # Проверка на ФИО (три слова с заглавными)
     fio_count = sum(1 for s in sample if len(s.split()) == 3 and all(p[0].isupper() for p in s.split() if p))
     if fio_count / len(sample) > 0.6:
         return "fio"
     
-    # Телефон (российские форматы)
     import re
     phone_pattern = re.compile(r'^[\+]?[7|8][\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}$')
     if sum(1 for s in sample if phone_pattern.match(s.replace(" ", ""))) / len(sample) > 0.6:
         return "phone"
     
-    # Паспорт (серия 4 цифры + номер 6 цифр)
     passport_pattern = re.compile(r'^\d{4}[\s\-]?\d{6}$')
     if sum(1 for s in sample if passport_pattern.match(s.replace(" ", ""))) / len(sample) > 0.6:
         return "passport"
     
-    # Email
     if sum(1 for s in sample if "@" in s and "." in s) / len(sample) > 0.6:
         return "email"
     
-    # Дата (простые паттерны)
     date_pattern = re.compile(r'\d{2}[\.\/\-]\d{2}[\.\/\-]\d{2,4}')
     if sum(1 for s in sample if date_pattern.search(s)) / len(sample) > 0.6:
         return "date"
     
-    # Число
     try:
         for s in sample:
             float(s.replace(",", "."))
@@ -213,7 +205,6 @@ def generate_fake_value(original: str, col_type: str) -> str:
     else:
         value = original
     
-    # Подмешиваем случайные буквы/символы к любому результату
     value = _mix_random_chars(value)
     return value
 
@@ -234,7 +225,6 @@ def _mix_random_chars(text: str, mix_rate: float = 0.15) -> str:
     for ch in text:
         result.append(ch)
         if random.random() < mix_rate:
-            # Вставляем 1 случайную букву после текущей
             result.append(random.choice(ALL_LETTERS))
     return "".join(result)
 
@@ -247,7 +237,6 @@ def mask_excel(input_path: Path, output_path: Path, user_login: str, original_ha
     wb = openpyxl.load_workbook(input_path)
     ws = wb.active
     
-    # Собираем заголовки и данные
     headers = []
     rows = []
     for row_idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
@@ -259,22 +248,18 @@ def mask_excel(input_path: Path, output_path: Path, user_login: str, original_ha
     if not rows:
         raise ValueError("Файл пуст (нет данных после заголовка)")
     
-    # Определяем типы колонок по первым 50 строкам (или меньше)
     sample_rows = rows[:50]
     col_types = {}
     for col_idx, header in enumerate(headers):
         col_values = [r[col_idx] if col_idx < len(r) else None for r in sample_rows]
         col_types[header] = detect_column_type(col_values)
     
-    # Создаём новый workbook
     new_wb = openpyxl.Workbook()
     new_ws = new_wb.active
     
-    # Записываем заголовки (оставляем как есть)
     for col_idx, header in enumerate(headers, start=1):
         new_ws.cell(row=1, column=col_idx, value=header)
     
-    # Обрабатываем строки
     preview_rows = []
     total_cells_masked = 0
     
@@ -286,7 +271,6 @@ def mask_excel(input_path: Path, output_path: Path, user_login: str, original_ha
                 new_row.append(original_val)
                 continue
             
-            # Проверяем, есть ли уже маска для этого значения (чтобы сохранить консистентность)
             existing = db.query(MaskRecord).filter_by(
                 user_login=user_login,
                 original_hash=original_hash,
@@ -298,7 +282,6 @@ def mask_excel(input_path: Path, output_path: Path, user_login: str, original_ha
                 masked_val = existing.masked_value
             else:
                 masked_val = generate_fake_value(str(original_val), col_types[header])
-                # Сохраняем в БД
                 record = MaskRecord(
                     user_login=user_login,
                     original_hash=original_hash,
@@ -311,7 +294,6 @@ def mask_excel(input_path: Path, output_path: Path, user_login: str, original_ha
             
             new_row.append(masked_val)
             
-            # Предпросмотр: первые 5 строк данных
             if row_idx <= 6:
                 preview_rows.append({
                     "column": header,
@@ -320,14 +302,12 @@ def mask_excel(input_path: Path, output_path: Path, user_login: str, original_ha
                     "detected_type": col_types[header]
                 })
         
-        # Записываем строку в новый лист
         for col_idx, val in enumerate(new_row, start=1):
             new_ws.cell(row=row_idx, column=col_idx, value=val)
     
     db.commit()
     new_wb.save(output_path)
     
-    # Сохраняем прогресс файла
     progress = FileProgress(
         user_login=user_login,
         original_hash=original_hash,
@@ -365,13 +345,11 @@ def unmask_excel(masked_path: Path, output_path: Path, user_login: str, original
     if not rows:
         raise ValueError("Файл пуст")
     
-    # Строим обратный словарь из БД для этого пользователя и хэша
     records = db.query(MaskRecord).filter_by(
         user_login=user_login,
         original_hash=original_hash
     ).all()
     
-    # Ключ: (column_name, masked_value) -> original_value
     reverse_map: Dict[Tuple[str, str], str] = {}
     for rec in records:
         reverse_map[(rec.column_name, rec.masked_value)] = rec.original_value
@@ -396,7 +374,6 @@ def unmask_excel(masked_path: Path, output_path: Path, user_login: str, original
                 new_ws.cell(row=row_idx, column=col_idx + 1, value=original)
                 restored_count += 1
             else:
-                # Если соответствия нет — оставляем как есть
                 new_ws.cell(row=row_idx, column=col_idx + 1, value=masked_val)
     
     new_wb.save(output_path)
@@ -435,10 +412,6 @@ class LoginRequest(BaseModel):
     password: str
 
 # --- Аутентификация (простая, без токенов, для демо) ---
-# В реальном приложении используйте сессии или JWT. Здесь для простоты
-# проверяем логин/пароль при каждом запросе через заголовки или форму.
-# Для демонстрации используем query-параметр или заголовок X-User.
-# Клиент будет передавать логин и пароль в заголовках.
 
 def get_current_user(request: Request) -> str:
     """Извлекает логин и пароль из заголовков и проверяет по JSON."""
@@ -457,7 +430,6 @@ async def root():
     """Отдаёт index.html."""
     html_path = BASE_DIR / "index.html"
     if not html_path.exists():
-        # Fallback для разработки, если файл рядом
         html_path = Path(__file__).parent / "index.html"
     if html_path.exists():
         return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
@@ -488,14 +460,12 @@ async def upload_file(
     content = await file.read()
     file_hash = compute_file_hash(content)
     
-    # Сохраняем оригинал
     original_path = UPLOAD_DIR / f"{user}_{file_hash[:16]}_{file.filename}"
     with open(original_path, "wb") as f:
         f.write(content)
     
     logger.info(f"UPLOAD | user={user} | file={file.filename} | hash={file_hash[:12]}...")
     
-    # Быстрый предпросмотр: читаем первые несколько строк
     try:
         wb = openpyxl.load_workbook(original_path)
         ws = wb.active
@@ -543,7 +513,6 @@ async def process_file(
         logger.error(f"PROCESS_ERROR | user={user} | error={e}")
         raise HTTPException(500, f"Ошибка обработки: {e}")
     
-    # Сохраняем связь для обратной конвертации: хэш -> оригинальное имя
     return {
         "preview": result["preview"],
         "col_types": result["col_types"],
@@ -556,7 +525,6 @@ async def process_file(
 @app.get("/api/download/{filename}")
 async def download_file(filename: str, user: str = Depends(get_current_user)):
     """Скачивание замаскированного файла."""
-    # Проверяем, что файл принадлежит пользователю (по префиксу)
     if not filename.startswith("masked_"):
         raise HTTPException(400, "Неверный файл")
     
@@ -585,7 +553,6 @@ async def unmask_file(
     if not file.filename.lower().endswith(('.xlsx', '.xls')):
         raise HTTPException(400, "Только Excel файлы")
     
-    # Сохраняем загруженный замаскированный файл
     content = await file.read()
     masked_upload_path = UPLOAD_DIR / f"{user}_unmask_{file.filename}"
     with open(masked_upload_path, "wb") as f:
@@ -631,19 +598,39 @@ async def get_logs(user: str = Depends(get_current_user)):
     lines = []
     if LOG_FILE.exists():
         with open(LOG_FILE, 'r', encoding='utf-8', errors='replace') as f:
-            lines = f.readlines()[-200:]  # последние 200 строк
+            lines = f.readlines()[-200:]
     return {"logs": [l.strip() for l in lines]}
 
 # ============================================================
 # МОДУЛЬ: ЗАПУСК (ДЛЯ РАЗРАБОТКИ / PYINSTALLER)
 # ============================================================
+
+
+class _NoConsoleStream:
+    """Заглушка для sys.stdout / sys.stderr при сборке --noconsole.
+    PyInstaller заменяет их на None, из-за чего uvicorn падает
+    (ColorizeFormatter вызывает sys.stderr.isatty())."""
+
+    def write(self, *args, **kwargs):
+        return 0
+
+    def flush(self, *args, **kwargs):
+        return 0
+
+    def isatty(self) -> bool:
+        return False
+
+
 def run_server():
     """Запуск uvicorn. Вызывается из main или из exe."""
+    if sys.stdout is None:
+        sys.stdout = _NoConsoleStream()
+    if sys.stderr is None:
+        sys.stderr = _NoConsoleStream()
+
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=9321, log_level="info")
 
 if __name__ == "__main__":
-    # При сборке exe без консоли этот блок не выполнится напрямую,
-    # но PyInstaller создаст точку входа. Для отладки можно запускать.
     ensure_users_file()
     run_server()

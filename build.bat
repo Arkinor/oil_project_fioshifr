@@ -100,12 +100,6 @@ if exist "%ICON_FILE%" (
     echo Иконка %ICON_FILE% не найдена — сборка без иконки.
 )
 
-REM --add-data "index.html;." — кладёт index.html внутрь бандла (sys._MEIPASS)
-REM --noconsole — без окна консоли (для запуска как службы)
-REM --onefile — один exe
-REM --uac-admin — запрос прав администратора (для установки как службы)
-REM --collect-submodules — подстраховка для динамических импортов FastAPI/uvicorn
-
 pyinstaller ^
     --noconfirm ^
     --clean ^

@@ -10,7 +10,7 @@ from faker import Faker
 from datetime import datetime, timedelta
 
 fake = Faker('ru_RU')
-Faker.seed(42)  # воспроизводимость
+Faker.seed(42)
 
 wb = openpyxl.Workbook()
 ws = wb.active
@@ -18,16 +18,16 @@ ws.title = "Сотрудники"
 
 # ---- Заголовки (все типы, которые умеет определять main.py) ----
 headers = [
-    "ФИО",                  # fio
-    "Телефон",              # phone
-    "Паспорт",              # passport
-    "Email",                # email
-    "Дата рождения",        # date
-    "Оклад",                # number
-    "Отдел",                # text
-    "Должность",            # text
-    "Комментарий",          # text (с пробелами и знаками)
-    "Пустая колонка",       # пустая — не должна маскироваться
+    "ФИО",
+    "Телефон",
+    "Паспорт",
+    "Email",
+    "Дата рождения",
+    "Оклад",
+    "Отдел",
+    "Должность",
+    "Комментарий",
+    "Пустая колонка",
 ]
 
 # ---- Стилизация заголовка ----
@@ -58,29 +58,18 @@ for col_idx, h in enumerate(headers, start=1):
     "Работает по совместительству",
 ]
 
-N = 30  # количество сотрудников
+N = 30
 for i in range(N):
     row = i + 2
-    # ФИО — всегда три слова с заглавными
     ws.cell(row=row, column=1, value=fake.name())
-    # Телефон — российский формат
     ws.cell(row=row, column=2, value=fake.phone_number())
-    # Паспорт — серия 4 цифры + номер 6 цифр
     ws.cell(row=row, column=3, value=f"{fake.random_int(1000, 9999)} {fake.random_int(100000, 999999)}")
-    # Email
     ws.cell(row=row, column=4, value=fake.email())
-    # Дата рождения
     ws.cell(row=row, column=5, value=fake.date_of_birth(minimum_age=22, maximum_age=60).strftime("%d.%m.%Y"))
-    # Оклад — число с копейками (через запятую, как в русском Excel)
     ws.cell(row=row, column=6, value=round(fake.random.uniform(40000, 250000), 2))
-    # Отдел
     ws.cell(row=row, column=7, value=fake.random_element(отделы))
-    # Должность
     ws.cell(row=row, column=8, value=fake.random_element(должности))
-    # Комментарий
     ws.cell(row=row, column=9, value=fake.random_element(комментарии))
-    # Пустая колонка — оставляем None
-    # (column=10 не заполняем)
 
 # ---- Автоширина колонок ----
 for col_idx in range(1, len(headers) + 1):

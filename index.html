@@ -276,12 +276,10 @@ async function handleFileSelect(file) {
         document.getElementById('upload-hash').textContent = data.file_hash;
         document.getElementById('upload-info').classList.remove('hidden');
         
-        // Показываем предпросмотр
         renderPreviewTable('preview-headers', 'preview-body', data.headers, data.preview_rows);
         document.getElementById('preview-section').classList.remove('hidden');
         document.getElementById('result-section').classList.add('hidden');
         
-        // Заполняем хэш для обратной конвертации
         document.getElementById('unmask-hash').value = data.file_hash;
     } catch (e) {
         alert(e.message);
@@ -330,7 +328,6 @@ async function doProcess() {
         const data = await res.json();
         state.maskedFilename = data.masked_filename;
         
-        // Показываем краткий статус
         const resultDiv = document.getElementById('result-preview');
         let html = `<p>✅ Обработано строк: <strong>${data.rows_processed}</strong>, 
                      замаскировано ячеек: <strong>${data.total_cells_masked}</strong></p>`;
@@ -338,7 +335,6 @@ async function doProcess() {
         resultDiv.innerHTML = html;
         document.getElementById('result-section').classList.remove('hidden');
         
-        // Автоматически скачиваем файл
         downloadMasked();
     } catch (e) {
         alert(e.message);
@@ -445,7 +441,7 @@ async function loadLogs() {
 }
 
 // ========== МОДУЛЬ: ИНИЦИАЛИЗАЦИЯ ==========
-// Восстановление сессии не предусмотрено (для простоты)
+
 </script>
 </body>
 </html>
