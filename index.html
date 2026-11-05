@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PII Masking Tool</title>
+    <style>
+        /* ========== МОДУЛЬ: БАЗОВЫЕ СТИЛИ ========== */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        h1 { font-size: 1.6rem; margin-bottom: 8px; }
+        h2 { font-size: 1.2rem; margin-bottom: 12px; color: #16213e; }
+        .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 20px; }
+
+        /* ========== МОДУЛЬ: АВТОРИЗАЦИЯ ========== */
+        #auth-section { max-width: 400px; margin: 80px auto; }
+        #auth-section .card { padding: 32px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.9rem; }
+        .form-group input {
+            width: 100%; padding: 10px 12px; border: 1px solid #ccc;
+            border-radius: 8px; font-size: 1rem;
+        }
+        .form-group input:focus { outline: none; border-color: #4361ee; box-shadow: 0 0 0 3px rgba(67,97,238,0.15); }
+        button {
+            background: #4361ee; color: #fff; border: none; padding: 12px 20px;
+            border-radius: 8px; font-size: 1rem; cursor: pointer; font-weight: 600;
+            transition: background 0.2s;
+        }
+        button:hover { background: #3a56d4; }
+        button:disabled { background: #a0aec0; cursor: not-allowed; }
+        button.secondary { background: #e2e8f0; color: #1a1a2e; }
+        button.secondary:hover { background: #cbd5e0; }
+        .error { color: #e53e3e; font-size: 0.9rem; margin-top: 8px; }
+
+        /* ========== МОДУЛЬ: ОСНОВНОЙ ИНТЕРФЕЙС ========== */
+        #main-section { display: none; }
+        .header-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+        }
+        .user-badge { background: #e2e8f0; padding: 6px 14px; border-radius: 20px; font-size: 0.9rem; }
+        .upload-area {
+            border: 2px dashed #cbd5e0; border-radius: 12px; padding: 40px;
+            text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+        }
+        .upload-area:hover { border-color: #4361ee; background: #f8f9ff; }
+        .upload-area.dragover { border-color: #4361ee; background: #eef1ff; }
+        .preview-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 0.85rem; }
+        .preview-table th, .preview-table td {
+            border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left;
+            max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .preview-table th { background: #f7fafc; font-weight: 600; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+        .badge-fio { background: #dbeafe; color: #1e40af; }
+        .badge-phone { background: #dcfce7; color: #166534; }
+        .badge-passport { background: #fef9c3; color: #854d0e; }
+        .badge-email { background: #f3e8ff; color: #6b21a8; }
+        .badge-date { background: #ffe4e6; color: #9f1239; }
+        .badge-number { background: #e0e7ff; color: #3730a3; }
+        .badge-text { background: #f1f5f9; color: #475569; }
+        .actions { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+        .logs { background: #1a1a2e; color: #a0aec0; font-family: monospace; font-size: 0.8rem;
+                padding: 16px; border-radius: 8px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<!-- ========== МОДУЛЬ: АВТОРИЗАЦИЯ ========== -->
+<div id="auth-section" class="container">
+    <div class="card">
+        <h1>🔐 Вход</h1>
+        <p class="subtitle">Введите логин и пароль (по умолчанию admin/admin)</p>
+        <div class="form-group">
+            <label>Логин</label>
+            <input type="text" id="login-input" placeholder="admin" autocomplete="username">
+        </div>
+        <div class="form-group">
+            <label>Пароль</label>
+            <input type="password" id="password-input" placeholder="admin" autocomplete="current-password">
+        </div>
+        <button onclick="doLogin()">Войти</button>
+        <div id="login-error" class="error"></div>
+    </div>
+</div>
+
+<!-- ========== МОДУЛЬ: ОСНОВНОЙ ИНТЕРФЕЙС ========== -->
+<div id="main-section" class="container">
+    <div class="header-bar">
+        <div>
+            <h1>📊 Маскировка персональных данных</h1>
+            <p class="subtitle">Загрузите Excel — получите обезличенный файл с возможностью восстановления</p>
+        </div>
+        <div>
+            <span class="user-badge" id="user-badge">user</span>
+            <button class="secondary" onclick="doLogout()" style="margin-left:8px; padding:8px 16px; font-size:0.9rem;">Выйти</button>
+        </div>
+    </div>
+
+    <!-- Шаг 1: Загрузка -->
+    <div class="card">
+        <h2>1. Загрузить файл</h2>
+        <div class="upload-area" id="upload-area">
+            <p style="font-size:2rem; margin-bottom:8px;">📁</p>
+            <p><strong>Нажмите или перетащите Excel-файл</strong></p>
+            <p style="color:#888; font-size:0.85rem;">(.xlsx, .xls)</p>
+            <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
+        </div>
+        <div id="upload-info" class="hidden" style="margin-top:16px;">
+            <p><strong>Файл:</strong> <span id="upload-filename"></span></p>
+            <p><strong>Хэш:</strong> <code id="upload-hash"></code></p>
+        </div>
+        <div id="preview-section" class="hidden" style="margin-top:20px;">
+            <h2>Предпросмотр (оригинал)</h2>
+            <div style="overflow-x:auto;">
+                <table class="preview-table" id="preview-table">
+                    <thead><tr id="preview-headers"></tr></thead>
+                    <tbody id="preview-body"></tbody>
+                </table>
+            </div>
+            <div class="actions">
+                <button onclick="doProcess()" id="process-btn">⚙️ Обработать и скачать</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Шаг 2: Результат -->
+    <div id="result-section" class="card hidden">
+        <h2>2. Результат маскировки</h2>
+        <div id="result-preview"></div>
+        <div class="actions">
+            <button onclick="downloadMasked()" id="download-btn">📥 Скачать замаскированный файл</button>
+        </div>
+        <p style="margin-top:12px; font-size:0.85rem; color:#666;">
+            Соответствия сохранены в базе. Для обратной конвертации используйте раздел ниже.
+        </p>
+    </div>
+
+    <!-- Шаг 3: Обратная конвертация -->
+    <div class="card">
+        <h2>3. Обратная конвертация (восстановление)</h2>
+        <p class="subtitle">Загрузите ранее замаскированный файл и укажите его исходный хэш</p>
+        <div class="form-group">
+            <label>Исходный хэш файла</label>
+            <input type="text" id="unmask-hash" placeholder="Вставьте хэш из шага 1">
+        </div>
+        <div class="form-group">
+            <label>Замаскированный файл</label>
+            <input type="file" id="unmask-file" accept=".xlsx,.xls">
+        </div>
+        <button onclick="doUnmask()">🔄 Восстановить</button>
+        <div id="unmask-result" style="margin-top:12px;"></div>
+    </div>
+
+    <!-- Админ-панель (только для admin) -->
+    <div id="admin-section" class="card hidden">
+        <h2>📋 Логи активности</h2>
+        <div class="logs" id="logs-content">Загрузка...</div>
+        <button class="secondary" onclick="loadLogs()" style="margin-top:12px;">Обновить</button>
+    </div>
+</div>
+
+<script>
+// ========== МОДУЛЬ: СОСТОЯНИЕ ==========
+let state = {
+    login: '',
+    password: '',
+    fileHash: '',
+    filename: '',
+    maskedFilename: ''
+};
+
+// ========== МОДУЛЬ: АВТОРИЗАЦИЯ ==========
+async function doLogin() {
+    const login = document.getElementById('login-input').value.trim();
+    const password = document.getElementById('password-input').value;
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = '';
+    
+    if (!login || !password) {
+        errEl.textContent = 'Введите логин и пароль';
+        return;
+    }
+    
+    try {
+        const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ login, password })
+        });
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.detail || 'Ошибка входа');
+        }
+        state.login = login;
+        state.password = password;
+        
+        document.getElementById('auth-section').style.display = 'none';
+        document.getElementById('main-section').style.display = 'block';
+        document.getElementById('user-badge').textContent = login;
+        
+        if (login === 'admin') {
+            document.getElementById('admin-section').classList.remove('hidden');
+            loadLogs();
+        }
+    } catch (e) {
+        errEl.textContent = e.message;
+    }
+}
+
+function doLogout() {
+    state = { login: '', password: '', fileHash: '', filename: '', maskedFilename: '' };
+    document.getElementById('auth-section').style.display = 'block';
+    document.getElementById('main-section').style.display = 'none';
+    document.getElementById('preview-section').classList.add('hidden');
+    document.getElementById('result-section').classList.add('hidden');
+    document.getElementById('upload-info').classList.add('hidden');
+    document.getElementById('admin-section').classList.add('hidden');
+}
+
+// ========== МОДУЛЬ: ЗАГРУЗКА ФАЙЛА ==========
+const uploadArea = document.getElementById('upload-area');
+const fileInput = document.getElementById('file-input');
+
+uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        handleFileSelect(e.dataTransfer.files[0]);
+    }
+});
+fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) handleFileSelect(fileInput.files[0]);
+});
+
+async function handleFileSelect(file) {
+    if (!file.name.toLowerCase().match(/\.xlsx?$/)) {
+        alert('Только Excel файлы (.xlsx, .xls)');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        const res = await fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'X-Login': state.login, 'X-Password': state.password },
+            body: formData
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Ошибка загрузки');
+        }
+        const data = await res.json();
+        state.fileHash = data.file_hash;
+        state.filename = data.filename;
+        
+        document.getElementById('upload-filename').textContent = data.filename;
+        document.getElementById('upload-hash').textContent = data.file_hash;
+        document.getElementById('upload-info').classList.remove('hidden');
+        
+        // Показываем предпросмотр
+        renderPreviewTable('preview-headers', 'preview-body', data.headers, data.preview_rows);
+        document.getElementById('preview-section').classList.remove('hidden');
+        document.getElementById('result-section').classList.add('hidden');
+        
+        // Заполняем хэш для обратной конвертации
+        document.getElementById('unmask-hash').value = data.file_hash;
+    } catch (e) {
+        alert(e.message);
+    }
+}
+
+// ========== МОДУЛЬ: ОТРИСОВКА ТАБЛИЦ ==========
+function renderPreviewTable(headersId, bodyId, headers, rows) {
+    const thead = document.getElementById(headersId);
+    const tbody = document.getElementById(bodyId);
+    thead.innerHTML = headers.map(h => `<th>${escapeHtml(h)}</th>`).join('');
+    tbody.innerHTML = rows.map(row => {
+        return '<tr>' + row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('') + '</tr>';
+    }).join('');
+}
+
+function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ========== МОДУЛЬ: ОБРАБОТКА ==========
+async function doProcess() {
+    if (!state.fileHash || !state.filename) {
+        alert('Сначала загрузите файл');
+        return;
+    }
+    const btn = document.getElementById('process-btn');
+    btn.disabled = true;
+    btn.textContent = 'Обработка...';
+    
+    try {
+        const formData = new FormData();
+        formData.append('file_hash', state.fileHash);
+        formData.append('filename', state.filename);
+        
+        const res = await fetch('/api/process', {
+            method: 'POST',
+            headers: { 'X-Login': state.login, 'X-Password': state.password },
+            body: formData
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Ошибка обработки');
+        }
+        const data = await res.json();
+        state.maskedFilename = data.masked_filename;
+        
+        // Показываем результат
+        const resultDiv = document.getElementById('result-preview');
+        let html = `<p><strong>Обработано строк:</strong> ${data.rows_processed}, 
+                    <strong>замаскировано ячеек:</strong> ${data.total_cells_masked}</p>`;
+        html += '<h3 style="margin-top:16px; font-size:1rem;">Определённые типы колонок:</h3><ul>';
+        for (const [col, typ] of Object.entries(data.col_types)) {
+            html += `<li><strong>${escapeHtml(col)}</strong> → <span class="badge badge-${typ}">${typ}</span></li>`;
+        }
+        html += '</ul>';
+        html += '<h3 style="margin-top:16px; font-size:1rem;">Примеры замен:</h3>';
+        html += '<table class="preview-table"><thead><tr><th>Колонка</th><th>Оригинал</th><th>Замаскировано</th><th>Тип</th></tr></thead><tbody>';
+        for (const p of data.preview) {
+            html += `<tr><td>${escapeHtml(p.column)}</td><td>${escapeHtml(p.original)}</td>
+                     <td>${escapeHtml(p.masked)}</td><td><span class="badge badge-${p.detected_type}">${p.detected_type}</span></td></tr>`;
+        }
+        html += '</tbody></table>';
+        
+        resultDiv.innerHTML = html;
+        document.getElementById('result-section').classList.remove('hidden');
+    } catch (e) {
+        alert(e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '⚙️ Обработать и скачать';
+    }
+}
+
+function downloadMasked() {
+    if (!state.maskedFilename) return;
+    fetch(`/api/download/${state.maskedFilename}`, {
+        headers: { 'X-Login': state.login, 'X-Password': state.password }
+    })
+    .then(res => {
+        if (!res.ok) throw new Error('Ошибка скачивания');
+        return res.blob();
+    })
+    .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = state.maskedFilename;
+        a.click();
+        URL.revokeObjectURL(url);
+    })
+    .catch(e => alert(e.message));
+}
+
+// ========== МОДУЛЬ: ОБРАТНАЯ КОНВЕРТАЦИЯ ==========
+async function doUnmask() {
+    const hash = document.getElementById('unmask-hash').value.trim();
+    const fileInputEl = document.getElementById('unmask-file');
+    const resultEl = document.getElementById('unmask-result');
+    resultEl.innerHTML = '';
+    
+    if (!hash) {
+        resultEl.innerHTML = '<p class="error">Введите хэш исходного файла</p>';
+        return;
+    }
+    if (!fileInputEl.files.length) {
+        resultEl.innerHTML = '<p class="error">Выберите замаскированный файл</p>';
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInputEl.files[0]);
+    formData.append('original_hash', hash);
+    
+    try {
+        const res = await fetch('/api/unmask', {
+            method: 'POST',
+            headers: { 'X-Login': state.login, 'X-Password': state.password },
+            body: formData
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Ошибка восстановления');
+        }
+        const data = await res.json();
+        
+        resultEl.innerHTML = `
+            <p>✅ Восстановлено ячеек: <strong>${data.restored_cells}</strong>, 
+               обработано строк: <strong>${data.rows_processed}</strong></p>
+            <button class="secondary" onclick="downloadRestored('${data.download_url}')">📥 Скачать восстановленный файл</button>
+        `;
+    } catch (e) {
+        resultEl.innerHTML = `<p class="error">${e.message}</p>`;
+    }
+}
+
+function downloadRestored(url) {
+    fetch(url, {
+        headers: { 'X-Login': state.login, 'X-Password': state.password }
+    })
+    .then(res => {
+        if (!res.ok) throw new Error('Ошибка скачивания');
+        return res.blob();
+    })
+    .then(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'restored.xlsx';
+        a.click();
+        URL.revokeObjectURL(URL.createObjectURL(blob));
+    })
+    .catch(e => alert(e.message));
+}
+
+// ========== МОДУЛЬ: ЛОГИ (АДМИН) ==========
+async function loadLogs() {
+    const el = document.getElementById('logs-content');
+    el.textContent = 'Загрузка...';
+    try {
+        const res = await fetch('/api/logs', {
+            headers: { 'X-Login': state.login, 'X-Password': state.password }
+        });
+        if (!res.ok) throw new Error('Нет доступа');
+        const data = await res.json();
+        el.textContent = data.logs.join('\n') || 'Пусто';
+    } catch (e) {
+        el.textContent = 'Ошибка загрузки логов: ' + e.message;
+    }
+}
+
+// ========== МОДУЛЬ: ИНИЦИАЛИЗАЦИЯ ==========
+// Восстановление сессии не предусмотрено (для простоты)
+</script>
+</body>
+</html>
