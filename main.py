@@ -52,7 +52,8 @@ logging.basicConfig(
     filename=str(LOG_FILE),
     level=logging.INFO,
     format="%(asctime)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    datefmt="%Y-%m-%d %H:%M:%S",
+    encoding='utf-8'
 )
 logger = logging.getLogger("activity")
 
@@ -188,42 +189,54 @@ def detect_column_type(values: List[Any]) -> str:
     return "text"
 
 def generate_fake_value(original: str, col_type: str) -> str:
-    """Генерирует осмысленное фейковое значение в зависимости от типа."""
+    """Генерирует осмысленное фейковое значение в зависимости от типа.
+    В конце подмешивает случайные буквы к результату."""
     original = str(original).strip()
     if not original:
         return original
     
     if col_type == "fio":
-        return fake.name()
+        value = fake.name()
     elif col_type == "phone":
-        return fake.phone_number()
+        value = fake.phone_number()
     elif col_type == "passport":
-        return f"{fake.random_int(1000, 9999)} {fake.random_int(100000, 999999)}"
+        value = f"{fake.random_int(1000, 9999)} {fake.random_int(100000, 999999)}"
     elif col_type == "email":
-        return fake.email()
+        value = fake.email()
     elif col_type == "date":
-        return fake.date(pattern="%d.%m.%Y")
+        value = fake.date(pattern="%d.%m.%Y")
     elif col_type == "number":
-        # Сохраняем примерный формат (целое или с запятой)
         if "," in original:
-            return str(round(fake.random.uniform(1, 99999), 2)).replace(".", ",")
-        return str(fake.random_int(1, 99999))
+            value = str(round(fake.random.uniform(1, 99999), 2)).replace(".", ",")
+        else:
+            value = str(fake.random_int(1, 99999))
     else:
-        # Текст: подмешиваем случайные символы, но оставляем осмысленность
-        # Простая эвристика: заменяем буквы на похожие, вставляем символы
-        import random
-        replacements = {'а': 'α', 'е': 'ε', 'о': 'ο', 'р': 'ρ', 'с': 'ϲ', 'х': 'χ',
-                        'А': 'Α', 'В': 'Β', 'Е': 'Ε', 'К': 'Κ', 'М': 'Μ', 'Н': 'Η',
-                        'О': 'Ο', 'Р': 'Ρ', 'С': 'Ϲ', 'Т': 'Τ', 'Х': 'Χ'}
-        result = []
-        for ch in original:
-            if ch in replacements and random.random() > 0.7:
-                result.append(replacements[ch])
-            elif random.random() > 0.9:
-                result.append(ch + random.choice(['_', '-', '.', ' ']))
-            else:
-                result.append(ch)
-        return "".join(result)
+        value = original
+    
+    # Подмешиваем случайные буквы/символы к любому результату
+    value = _mix_random_chars(value)
+    return value
+
+
+CYRILLIC_LOWER = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
+CYRILLIC_UPPER = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ"
+LATIN_LOWER = "abcdefghijklmnopqrstuvwxyz"
+LATIN_UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+ALL_LETTERS = CYRILLIC_LOWER + CYRILLIC_UPPER + LATIN_LOWER + LATIN_UPPER
+
+
+def _mix_random_chars(text: str, mix_rate: float = 0.15) -> str:
+    """Подмешивает случайные буквы внутрь строки с заданной частотой."""
+    import random
+    if not text or len(text) <= 2:
+        return text
+    result = []
+    for ch in text:
+        result.append(ch)
+        if random.random() < mix_rate:
+            # Вставляем 1 случайную букву после текущей
+            result.append(random.choice(ALL_LETTERS))
+    return "".join(result)
 
 def mask_excel(input_path: Path, output_path: Path, user_login: str, original_hash: str, db: Session) -> Dict[str, Any]:
     """
@@ -617,7 +630,7 @@ async def get_logs(user: str = Depends(get_current_user)):
     
     lines = []
     if LOG_FILE.exists():
-        with open(LOG_FILE, 'r', encoding='utf-8') as f:
+        with open(LOG_FILE, 'r', encoding='utf-8', errors='replace') as f:
             lines = f.readlines()[-200:]  # последние 200 строк
     return {"logs": [l.strip() for l in lines]}
 

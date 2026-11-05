@@ -142,16 +142,10 @@
         </div>
     </div>
 
-    <!-- Шаг 2: Результат -->
+    <!-- Шаг 2: Результат (скрытый блок — статус обработки) -->
     <div id="result-section" class="card hidden">
-        <h2>2. Результат маскировки</h2>
+        <h2>2. Результат</h2>
         <div id="result-preview"></div>
-        <div class="actions">
-            <button onclick="downloadMasked()" id="download-btn">📥 Скачать замаскированный файл</button>
-        </div>
-        <p style="margin-top:12px; font-size:0.85rem; color:#666;">
-            Соответствия сохранены в базе. Для обратной конвертации используйте раздел ниже.
-        </p>
     </div>
 
     <!-- Шаг 3: Обратная конвертация -->
@@ -336,25 +330,16 @@ async function doProcess() {
         const data = await res.json();
         state.maskedFilename = data.masked_filename;
         
-        // Показываем результат
+        // Показываем краткий статус
         const resultDiv = document.getElementById('result-preview');
-        let html = `<p><strong>Обработано строк:</strong> ${data.rows_processed}, 
-                    <strong>замаскировано ячеек:</strong> ${data.total_cells_masked}</p>`;
-        html += '<h3 style="margin-top:16px; font-size:1rem;">Определённые типы колонок:</h3><ul>';
-        for (const [col, typ] of Object.entries(data.col_types)) {
-            html += `<li><strong>${escapeHtml(col)}</strong> → <span class="badge badge-${typ}">${typ}</span></li>`;
-        }
-        html += '</ul>';
-        html += '<h3 style="margin-top:16px; font-size:1rem;">Примеры замен:</h3>';
-        html += '<table class="preview-table"><thead><tr><th>Колонка</th><th>Оригинал</th><th>Замаскировано</th><th>Тип</th></tr></thead><tbody>';
-        for (const p of data.preview) {
-            html += `<tr><td>${escapeHtml(p.column)}</td><td>${escapeHtml(p.original)}</td>
-                     <td>${escapeHtml(p.masked)}</td><td><span class="badge badge-${p.detected_type}">${p.detected_type}</span></td></tr>`;
-        }
-        html += '</tbody></table>';
-        
+        let html = `<p>✅ Обработано строк: <strong>${data.rows_processed}</strong>, 
+                     замаскировано ячеек: <strong>${data.total_cells_masked}</strong></p>`;
+        html += '<p style="margin-top:8px; font-size:0.85rem; color:#666;">Файл автоматически скачивается...</p>';
         resultDiv.innerHTML = html;
         document.getElementById('result-section').classList.remove('hidden');
+        
+        // Автоматически скачиваем файл
+        downloadMasked();
     } catch (e) {
         alert(e.message);
     } finally {
